@@ -1,9 +1,12 @@
 import requests
 import json
 
+# Configuration
 api_key = '4996b4ec-219f-411e-9d36-403e40db7a7d'
 input_file_name = 'raw_word_list.txt'
 output_file_name = 'generated_anki_cards.txt'
+
+# Global logging variables
 total_processed_words = 0
 total_skipped_words = 0
 skipped_words_list = []
@@ -51,6 +54,7 @@ def fetch_definitions_from_file():
     return processed_words
 
 
+# Returns None if the word wasn't found
 def fetch_single_word(word):
     global total_skipped_words
     global skipped_words_list
@@ -61,11 +65,11 @@ def fetch_single_word(word):
     response_obj = requests.post(url, json={})
     response_txt = response_obj.text
     response_dict = None
-    top_definition = None
     try:
         response_array = json.loads(response_txt)
         response_dict = response_array[0]
         top_definition = response_dict['def'][0]['sseq'][0][0][1]['dt'][0][1]
+        processed_word.definition = clean_webster_formatting(top_definition)
     except Exception as e:
         print(
             f'Error when looking up word "{word}". Skipping Word.')
@@ -73,7 +77,6 @@ def fetch_single_word(word):
         skipped_words_list.append(word)
         return None
 
-    processed_word.definition = clean_webster_formatting(top_definition)
     processed_word.part_of_speech = clean_webster_formatting(
         response_dict['fl'])
 
@@ -96,7 +99,7 @@ def write_anki_file(words):
 
     output_file = open(output_file_name, "w", encoding="utf-8")
 
-    # Write the header
+    # Write the header Anki expects on import.
     output_file.write('#separator:tab\n')
     output_file.write('#html:true\n')
     output_file.write('#tags column:11\n')
@@ -117,6 +120,8 @@ def write_word(word: ProcessedWord, file):
     total_processed_words = total_processed_words + 1
 
 
+# The Webster formatting has a lot of custom markup that we need to strip,
+# convert to html, or change to special characters.
 def clean_webster_formatting(input):
     result = input
     result = replace_colons(input)
@@ -131,7 +136,7 @@ def clean_webster_formatting(input):
 
 
 # Removes the beginning and end sections of a wrapper, but leaves the wrapped
-# contents
+# contents.
 def remove_wrapper(input, wrapper_start, wrapper_end):
     result = input
     start_idx = result.index(wrapper_start)
@@ -214,6 +219,9 @@ def remove_directional_etymology_chunk(input):
     return input
 
 
+# Word IDs where there are mulitple words have a colon followed by the index
+# of this particular definition. We take the first definition, so this isn't
+# needed.
 def clean_word_id(input):
     multi_entry_delimiter = ":"
     if multi_entry_delimiter in input:
@@ -223,8 +231,12 @@ def clean_word_id(input):
 
 def replace_colons(input):
     colon_str = '{bc}'
+    # Each definition has a leading colon, which doesn't suit Anki formatting
+    # so we strip that first.
     if colon_str in input and input.index(colon_str) == 0:
         input = input[4:]
+
+    # Replace the remaining colons.
     return input.replace(colon_str, '; ')
 
 
