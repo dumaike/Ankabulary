@@ -1,0 +1,15 @@
+#separator:tab
+#html:true
+#tags column:11
+aphotic	being the deep zone of an ocean or lake receiving too little light to permit photosynthesis					adjective			
+mizzle	to rain in very fine drops ; drizzle					verb			Middle English <em>misellen</em>; akin to Dutch dialect <em>mizzelen</em> to drizzle, Middle Dutch <em>mist</em> fog, mist
+febrile	marked or caused by fever ; feverish 					adjective			Medieval Latin <em>febrilis</em>, from Latin <em>febris</em> fever
+milquetoast	a timid, meek, or unassertive person					noun			Caspar <em>Milquetoast</em>, comic strip character created by H. T. Webster †1952 American cartoonist
+bloviate	to speak or write verbosely and windily 					verb			perhaps irregular from blow
+halcyon	characterized by happiness, great success, and prosperity ; golden 					adjective			
+majordomo	a head steward of a large household (such as a palace)					noun			Spanish <em>mayordomo</em> or obsolete Italian <em>maiordomo</em>, from Medieval Latin <em>major domus</em>, literally, chief of the house
+atoll	a coral island consisting of a reef surrounding a lagoon					noun			Divehi (Indo-Aryan language of the Maldive Islands) <em>atolu</em>
+capacious	containing or capable of containing a great deal 					adjective			Latin <em>capac-, capax</em> capacious, capable, from Latin <em>capere</em> 
+commodious	comfortably or conveniently spacious ; roomy 					adjective			Middle English, fertile, useful, modification of Medieval Latin <em>commodosus</em>, from Latin <em>commodum</em> convenience, from neuter of <em>commodus</em>
+gamine	a girl who hangs around on the streets					noun			borrowed from French, feminine derivative of <em>gamin</em> gamin
+shibboleth	a word or saying used by adherents of a party, sect, or belief and usually regarded by others as empty of real meaning 					noun			Hebrew <em>shibbōleth</em> stream; from the use of this word in Judges 12:6 as a test to distinguish Gileadites from Ephraimites
