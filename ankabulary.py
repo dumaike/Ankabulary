@@ -8,8 +8,9 @@ output_file_name = 'generated_anki_cards.txt'
 
 # Global logging variables
 total_processed_words = 0
+total_not_found_words = 0
 total_skipped_words = 0
-skipped_words_list = []
+not_found_words_list = []
 
 
 class ProcessedWord:
@@ -21,9 +22,9 @@ class ProcessedWord:
 
 
 def main():
-    global total_skipped_words
+    global total_not_found_words
     global total_processed_words
-    global skipped_words_list
+    global not_found_words_list
 
     print('Connecting to Merriam-Webster.')
     words = fetch_definitions_from_file()
@@ -32,11 +33,15 @@ def main():
     print('Ankabulary execution complete! ')
     print('*****************************************************************')
     print(f'{total_processed_words} words processed and written to {output_file_name}')
-    print(f'{total_skipped_words} words skipped {skipped_words_list}')
+    print(
+        f'Definitions for {total_not_found_words} words not found - {not_found_words_list}')
+    print(f'{total_skipped_words} duplicate words skipped')
     print('Never forget that you are loved <3')
 
 
 def fetch_definitions_from_file():
+    global total_skipped_words
+
     try:
         input_file = open(input_file_name, "r")
     except Exception as e:
@@ -46,18 +51,32 @@ def fetch_definitions_from_file():
 
     input_file_contents = input_file.read()
     words = input_file_contents.split()
-    processed_words = []
+    processed_words = {}
     for word in words:
+        # If this exact word already exists in the results, skip it.
+        if word.lower() in processed_words:
+            total_skipped_words = total_skipped_words + 1
+            continue
+
         proccessed_result = fetch_single_word(word)
-        if (proccessed_result is not None):
-            processed_words.append(proccessed_result)
+
+        # If no definition was found, skip it.
+        if proccessed_result is None:
+            continue
+
+        # If a conjugation of this word is already in the results, skip it.
+        if proccessed_result.word in processed_words:
+            total_skipped_words = total_skipped_words + 1
+            continue
+
+        processed_words[proccessed_result.word] = proccessed_result
     return processed_words
 
 
 # Returns None if the word wasn't found
 def fetch_single_word(word):
-    global total_skipped_words
-    global skipped_words_list
+    global total_not_found_words
+    global not_found_words_list
 
     processed_word = ProcessedWord()
 
@@ -72,9 +91,9 @@ def fetch_single_word(word):
         processed_word.definition = clean_webster_formatting(top_definition)
     except Exception as e:
         print(
-            f'Error when looking up word "{word}". Skipping Word.')
-        total_skipped_words = total_skipped_words + 1
-        skipped_words_list.append(word)
+            f'Error: when looking up word "{word}". Skipping Word.')
+        total_not_found_words = total_not_found_words + 1
+        not_found_words_list.append(word)
         return None
 
     processed_word.part_of_speech = clean_webster_formatting(
@@ -104,7 +123,7 @@ def write_anki_file(words):
     output_file.write('#html:true\n')
     output_file.write('#tags column:11\n')
 
-    for word in words:
+    for word in words.values():
         write_word(word, output_file)
 
     output_file.close()
