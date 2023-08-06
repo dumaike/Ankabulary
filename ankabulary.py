@@ -392,13 +392,8 @@ def n_spaces(n):
 
 def init_logs():
     global processed_words_results_dict
-    processed_words_results_dict[LogType.PROCESSED] = []
-    processed_words_results_dict[LogType.ERROR] = []
-    processed_words_results_dict[LogType.DUPLICATE] = []
-    processed_words_results_dict[LogType.INFLECTION] = []
-    processed_words_results_dict[LogType.VARIANT] = []
-    processed_words_results_dict[LogType.MISSING_ETYMOLOGY] = []
-
+    for log_type in LogType:
+        processed_words_results_dict[log_type] = []
 
 def log_word_result(log_type: LogType, word):
     global processed_words_results_dict
