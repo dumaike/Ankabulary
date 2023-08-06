@@ -1,22 +1,28 @@
 import requests
 import json
+from enum import Enum
 
 # ****************************************************************************#
 #                                 GLOBAL                                      #
 # ****************************************************************************#
 
 # Configuration
-api_key = '4996b4ec-219f-411e-9d36-403e40db7a7d'
 input_file_name = 'raw_word_list.txt'
 output_file_name = 'generated_anki_cards.txt'
 space_char = '&nbsp;'
 
-# Global logging variables
-total_processed_words = 0
-total_not_found_words = 0
-not_found_words_list = []
-total_skipped_words = 0
-skipped_words_list = []
+# A dictionary of log resuts of word fetching
+processed_words_results_dict = {}
+
+
+# Possible results of a word being fetched
+class LogType(Enum):
+    PROCESSED = 1
+    ERROR = 2
+    DUPLICATE = 3
+    VARIANT = 4
+    INFLECTION = 5
+    MISSING_ETYMOLOGY = 6
 
 
 class ProcessedWord:
@@ -26,25 +32,33 @@ class ProcessedWord:
         self.etymology = ""
         self.part_of_speech = ""
 
+# ****************************************************************************#
+#                                 MAIN                                        #
+# ****************************************************************************#
+
 
 def main():
-    global total_not_found_words
-    global total_processed_words
-    global not_found_words_list
+    init_logs()
 
-    print('Connecting to Merriam-Webster.')
+    print('*****************************************************************')
+    print('Connecting to Merriam-Webster.')    
+    print('Fetching word results.')
     words = fetch_definitions_from_file()
     write_anki_file(words)
 
-    print('Ankabulary execution complete! ')
     print('*****************************************************************')
-    print(f'{total_processed_words} words processed and written to {output_file_name}')
-    if total_not_found_words > 0:
-        print(
-            f'Definitions for {total_not_found_words} words not found - {not_found_words_list}')
-    if total_skipped_words > 0:
-        print(f'{total_skipped_words} duplicate words skipped - {skipped_words_list}')
+    print('Ankabulary execution complete! \n')
+
+    print_processed_word_result(LogType.ERROR, "had errors. No card's weren't created for them.")
+    print_processed_word_result(LogType.MISSING_ETYMOLOGY, "were missing etymologies.")
+    print_processed_word_result(LogType.DUPLICATE, "were duplicates of other words in the list, and cards were'nt created for them.")
+    print_processed_word_result(LogType.VARIANT, "had variant data that wasn't processed")
+    print_processed_word_result(LogType.INFLECTION, "had inflection data that wasn't processed")
+    print_processed_word_result(LogType.PROCESSED, "were fully processed!")
+
     print('Never forget that you are loved <3')
+    
+    print('*****************************************************************')
 
 
 # ****************************************************************************#
@@ -52,8 +66,6 @@ def main():
 # ****************************************************************************#
 
 def fetch_definitions_from_file():
-    global total_skipped_words
-    global skipped_words_list
 
     try:
         input_file = open(input_file_name, "r")
@@ -68,8 +80,7 @@ def fetch_definitions_from_file():
     for word in words:
         # If this exact word already exists in the results, skip it.
         if word.lower() in processed_words:
-            total_skipped_words = total_skipped_words + 1
-            skipped_words_list.append(word)
+            log_word_result(LogType.DUPLICATE, word)
             continue
 
         proccessed_result = fetch_single_word(word)
@@ -80,7 +91,7 @@ def fetch_definitions_from_file():
 
         # If a conjugation of this word is already in the results, skip it.
         if proccessed_result.word in processed_words:
-            total_skipped_words = total_skipped_words + 1
+            log_word_result(LogType.DUPLICATE, word)
             continue
 
         processed_words[proccessed_result.word] = proccessed_result
@@ -89,15 +100,14 @@ def fetch_definitions_from_file():
 
 # Returns None if the word wasn't found
 def fetch_single_word(word):
-    global total_not_found_words
-    global not_found_words_list
-
-    processed_word = ProcessedWord()
-
+    api_key = '4996b4ec-219f-411e-9d36-403e40db7a7d'
     url = f'https://www.dictionaryapi.com/api/v3/references/collegiate/json/{word}?key={api_key}'
+
     response_obj = requests.post(url, json={})
     response_txt = response_obj.text
     response_dict = None
+
+    processed_word = ProcessedWord()
     try:
         response_array = json.loads(response_txt)
 
@@ -106,12 +116,7 @@ def fetch_single_word(word):
         processed_word.definition = read_definitions_from_response(
             response_dict, word)
     except Exception as e:
-        print(
-            f'Error: when looking up word "{word}". Skipping Word. The word '
-            'could be missing or there could have been an unexpected formatting '
-            'in the response.')
-        total_not_found_words = total_not_found_words + 1
-        not_found_words_list.append(word)
+        log_word_result(LogType.ERROR, word)
         return None
 
     processed_word.part_of_speech = clean_webster_formatting(
@@ -121,8 +126,7 @@ def fetch_single_word(word):
         processed_word.etymology = clean_webster_formatting(
             response_dict['et'][0][1])
     except Exception as e:
-        print(
-            f'Info: Word "{word}" has no etymology.')
+        log_word_result(LogType.MISSING_ETYMOLOGY, word)
 
     processed_word.word = clean_word_id(response_dict['meta']['id'])
 
@@ -139,39 +143,46 @@ def read_definitions_from_response(response_dict, word):
         for sub_sseq in sense_sequence:
             for sub_sseq2 in sub_sseq:
                 if 'sn' in sub_sseq2[1]:
+
                     parsed_definition = read_single_sense(
-                        definition_index, sub_sseq2)
+                        definition_index, sub_sseq2,  word)
                     if parsed_definition is not None:
                         definition_index = definition_index + 1
                         return_definition = return_definition + \
                             parsed_definition
+                        
                 elif sub_sseq2[0] == 'pseq':
+
                     for pseq in sub_sseq2[1]:
                         parsed_definition = read_single_sense(
-                            definition_index, pseq)
+                            definition_index, pseq, word)
                         if parsed_definition is not None:
                             definition_index = definition_index + 1
                             return_definition = return_definition + \
                                 parsed_definition
+                            
                 elif 'dt' in sub_sseq2[1]:
                     # This word only has a single definition, so just grab it.
                     return clean_webster_formatting(sub_sseq2[1]['dt'][0][1])
                 else:
-                    print(f'Error: The API Response for {word} had unexpected '
-                          'formatting. Double check the card output.')
+                    print(f'Info: The API Response for {word} had unexpected '
+                          'formatting, but no errors were thrown. Double '
+                          'check the card output.')
 
     return return_definition.strip()
 
 
-def read_single_sense(index, sense):
+def read_single_sense(index, sense, word):
     sense_text = sense[1]
 
     # TODO: Support variant entries.
     if ('vrs' in sense_text and 'dt' not in sense_text):
+        log_word_result(LogType.VARIANT, word)
         return None
 
     # TODO: Support inflection entries.
-    if ('ins' in sense_text and 'dt' not in sense_text):
+    if ('ins' in sense_text and 'dt' not in sense_text):        
+        log_word_result(LogType.INFLECTION, word)
         return None
 
     raw_definition = clean_webster_formatting(sense_text['dt'][0][1])
@@ -203,13 +214,11 @@ def write_anki_file(words):
 
 
 def write_word(word: ProcessedWord, file):
-    global total_processed_words
-
     file.write(word.word + "\t")
     file.write(word.definition + "\t\t\t\t\t")
     file.write(word.part_of_speech + "\t\t\t")
     file.write(word.etymology + "\n")
-    total_processed_words = total_processed_words + 1
+    log_word_result(LogType.PROCESSED, word.word)
 
 
 # ****************************************************************************#
@@ -219,6 +228,8 @@ def write_word(word: ProcessedWord, file):
 # The Webster formatting has a lot of custom markup that we need to strip,
 # convert to html, or change to special characters.
 def clean_webster_formatting(input):
+    # TODO: See if you can turn some of these links into hyperlinks that 
+    # Anki could process instead of stripping them.
     result = input
     result = replace_colons(input)
     result = remove_synonym_wrappers(result)
@@ -311,7 +322,8 @@ def remove_directional_wrappers(input):
         outer_chunk_with_unwrapped_inner_word = remove_wrapper(
             original_outer_chunk, inner_wrapper_start, inner_wrapper_end)
         unwrapped_outer_chunk = remove_wrapper(
-            outer_chunk_with_unwrapped_inner_word, outer_wrapper_start, outer_wrapper_end)
+            outer_chunk_with_unwrapped_inner_word, \
+            outer_wrapper_start, outer_wrapper_end)
         input = input.replace(original_outer_chunk,
                               '; ' + unwrapped_outer_chunk)
     return input
@@ -372,6 +384,35 @@ def n_spaces(n):
     for idx in range(n):
         spaces = spaces + space_char
     return spaces
+
+
+# ****************************************************************************#
+#                              LOGGING                                        #
+# ****************************************************************************#
+
+def init_logs():
+    global processed_words_results_dict
+    processed_words_results_dict[LogType.PROCESSED] = []
+    processed_words_results_dict[LogType.ERROR] = []
+    processed_words_results_dict[LogType.DUPLICATE] = []
+    processed_words_results_dict[LogType.INFLECTION] = []
+    processed_words_results_dict[LogType.VARIANT] = []
+    processed_words_results_dict[LogType.MISSING_ETYMOLOGY] = []
+
+
+def log_word_result(log_type: LogType, word):
+    global processed_words_results_dict
+
+    processed_words_results_dict[log_type].append(word)
+
+def print_processed_word_result(log_type: LogType, description):    
+    global processed_words_results_dict
+
+    words_list = processed_words_results_dict[log_type]
+    if len(words_list) > 0:
+        print(
+            f'{len(words_list)} word(s) {description} - {words_list} \n\n')
+
 
 
 main()
