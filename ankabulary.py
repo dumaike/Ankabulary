@@ -63,7 +63,7 @@ def fetch_definitions_from_file():
         return []
 
     input_file_contents = input_file.read()
-    words = input_file_contents.split()
+    words = input_file_contents.split('\n')
     processed_words = {}
     for word in words:
         # If this exact word already exists in the results, skip it.
@@ -107,7 +107,9 @@ def fetch_single_word(word):
             response_dict, word)
     except Exception as e:
         print(
-            f'Error: when looking up word "{word}". Skipping Word.')
+            f'Error: when looking up word "{word}". Skipping Word. The word '
+            'could be missing or there could have been an unexpected formatting '
+            'in the response.')
         total_not_found_words = total_not_found_words + 1
         not_found_words_list.append(word)
         return None
@@ -137,14 +139,20 @@ def read_definitions_from_response(response_dict, word):
         for sub_sseq in sense_sequence:
             for sub_sseq2 in sub_sseq:
                 if 'sn' in sub_sseq2[1]:
-                    return_definition = return_definition + \
-                        read_single_sense(definition_index, sub_sseq2)
-                    definition_index = definition_index + 1
+                    parsed_definition = read_single_sense(
+                        definition_index, sub_sseq2)
+                    if parsed_definition is not None:
+                        definition_index = definition_index + 1
+                        return_definition = return_definition + \
+                            parsed_definition
                 elif sub_sseq2[0] == 'pseq':
                     for pseq in sub_sseq2[1]:
-                        return_definition = return_definition + \
-                            read_single_sense(definition_index, pseq)
-                        definition_index = definition_index + 1
+                        parsed_definition = read_single_sense(
+                            definition_index, pseq)
+                        if parsed_definition is not None:
+                            definition_index = definition_index + 1
+                            return_definition = return_definition + \
+                                parsed_definition
                 elif 'dt' in sub_sseq2[1]:
                     # This word only has a single definition, so just grab it.
                     return clean_webster_formatting(sub_sseq2[1]['dt'][0][1])
@@ -152,12 +160,22 @@ def read_definitions_from_response(response_dict, word):
                     print(f'Error: The API Response for {word} had unexpected '
                           'formatting. Double check the card output.')
 
-    return return_definition
+    return return_definition.strip()
 
 
 def read_single_sense(index, sense):
-    sense_text = clean_webster_formatting(sense[1]['dt'][0][1])
-    definition = str(index) + ') ' + sense_text + '<br>'
+    sense_text = sense[1]
+
+    # TODO: Support variant entries.
+    if ('vrs' in sense_text and 'dt' not in sense_text):
+        return None
+
+    # TODO: Support inflection entries.
+    if ('ins' in sense_text and 'dt' not in sense_text):
+        return None
+
+    raw_definition = clean_webster_formatting(sense_text['dt'][0][1])
+    definition = str(index) + ') ' + raw_definition + '<br>'
 
     return definition
 
@@ -228,6 +246,17 @@ def remove_wrapper(input, wrapper_start, wrapper_end):
     return result
 
 
+def remove_double_piped_wrappers(input, pipe_start):
+    pipe_start = '{' + pipe_start + '|'
+    while pipe_start in input:
+        chunk_start_idx = input.index(
+            pipe_start) + len(pipe_start)
+        wrapper_end = copy_wrapped_chunk(input[chunk_start_idx:], '|', '}')
+        input = remove_wrapper(input, pipe_start, wrapper_end)
+
+    return input
+
+
 # A chunk is an entire wrapped section, including the inner contents.
 def copy_wrapped_chunk(input, chunk_start, chunk_end):
     chunk_start_idx = 0
@@ -257,32 +286,15 @@ def remove_auto_link_wrappers(input):
 
 
 def remove_direct_link_wrappers(input):
-    direct_link_start = '{d_link|'
-    while direct_link_start in input:
-        chunk_start_idx = input.index(
-            direct_link_start) + len(direct_link_start)
-        wrapper_end = copy_wrapped_chunk(input[chunk_start_idx:], '|', '}')
-        input = remove_wrapper(input, direct_link_start, wrapper_end)
-
-    return input
+    return remove_double_piped_wrappers(input, 'd_link')
 
 
 def remove_etymology_link_wrappers(input):
-    wrapper_start = '{et_link|'
-    while wrapper_start in input:
-        chunk_start_idx = input.index(
-            wrapper_start) + len(wrapper_start)
-        wrapper_end = copy_wrapped_chunk(input[chunk_start_idx:], '|', '}')
-        input = remove_wrapper(input, wrapper_start, wrapper_end)
-
-    return input
+    return remove_double_piped_wrappers(input, 'et_link')
 
 
 def remove_synonym_wrappers(input):
-    synonym_start = '{sx|'
-    while synonym_start in input:
-        input = remove_wrapper(input, synonym_start, '||}')
-    return input
+    return remove_double_piped_wrappers(input, 'sx')
 
 
 def remove_directional_wrappers(input):
