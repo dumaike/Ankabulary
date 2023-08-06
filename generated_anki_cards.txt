@@ -1,0 +1,8 @@
+#separator:tab
+#html:true
+#tags column:11
+pollard	a tree cut back to the trunk to promote the growth of a dense head of foliage					noun			poll
+solicitude	the state of being concerned and anxious					noun			
+inveigle	to win over by wiles ; entice					verb			Anglo-French <em>enveegler, aveogler, avogler</em> to blind, hoodwink, from <em>avogle, enveugle</em> blind, from Medieval Latin <em>ab oculis</em>, literally, lacking eyes
+farouche	wild					adjective			French, wild, shy, from Old French, alteration of <em>forasche</em>, from Late Latin <em>forasticus</em> living outside, from Latin <em>foras</em> outdoors; akin to Latin <em>fores</em> door 
+elan	vigorous spirit or enthusiasm					noun			French, from Middle French <em>eslan</em> rush, from (<em>s'</em>)<em>eslancer</em> to rush, from <em>ex-</em> + <em>lancer</em> to hurl 

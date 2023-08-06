@@ -5,6 +5,7 @@ import json
 api_key = '4996b4ec-219f-411e-9d36-403e40db7a7d'
 input_file_name = 'raw_word_list.txt'
 output_file_name = 'generated_anki_cards.txt'
+space_char = '&nbsp;'
 
 # Global logging variables
 total_processed_words = 0
@@ -86,9 +87,13 @@ def fetch_single_word(word):
     response_dict = None
     try:
         response_array = json.loads(response_txt)
+
+        # Only take the first part of speech to proccess
         response_dict = response_array[0]
-        top_definition = response_dict['def'][0]['sseq'][0][0][1]['dt'][0][1]
-        processed_word.definition = clean_webster_formatting(top_definition)
+        merged_definitions = read_definitions_from_response(
+            response_dict, word)
+        processed_word.definition = clean_webster_formatting(
+            merged_definitions)
     except Exception as e:
         print(
             f'Error: when looking up word "{word}". Skipping Word.')
@@ -109,6 +114,47 @@ def fetch_single_word(word):
     processed_word.word = clean_word_id(response_dict['meta']['id'])
 
     return processed_word
+
+
+def read_definitions_from_response(response_dict, word):
+    return_definition = ''
+    definitions = response_dict['def']
+
+    for sub_def in definitions:
+        sense_sequence = sub_def['sseq']
+        for sub_sseq in sense_sequence:
+            for sub_sseq2 in sub_sseq:
+                if 'sn' in sub_sseq2[1]:
+                    return_definition = return_definition + \
+                        read_single_sense(sub_sseq2)
+                elif sub_sseq2[0] == 'pseq':
+                    for pseq in sub_sseq2[1]:
+                        return_definition = return_definition + \
+                            read_single_sense(pseq)
+                elif 'dt' in sub_sseq2[1]:
+                    # This word only has a single definition, so just grab it.
+                    return sub_sseq2[1]['dt'][0][1]
+                else:
+                    print(f'Error: The API Response for {word} had unexpected '
+                          'formatting. Double check the card output.')
+
+    return return_definition
+
+
+def read_single_sense(sense):
+    sense_number = sense[1]['sn']
+    tokenized_sense_numbers = sense_number.split()
+    formatted_sense_numbers = ''
+    # TODO: Format these nicely with html spaces when a fixed width font
+    # is used in the card styling.
+    for token in tokenized_sense_numbers:
+        formatted_sense_numbers = formatted_sense_numbers + \
+            token + ' '
+
+    sense_text = sense[1]['dt'][0][1]
+    definition = formatted_sense_numbers + sense_text + '<br>'
+
+    return definition
 
 
 def write_anki_file(words):
@@ -151,6 +197,7 @@ def clean_webster_formatting(input):
     result = remove_directional_etymology_chunk(result)
     result = remove_more_at_chunk(result)
     result = replace_italics_wrappers(result)
+    result = remove_cross_reference_chunk(result)
     return result
 
 
@@ -238,6 +285,14 @@ def remove_directional_etymology_chunk(input):
     return input
 
 
+def remove_cross_reference_chunk(input):
+    wrapper_start = '{dx_def}'
+    while wrapper_start in input:
+        chunk = generate_wrapped_chunk(input, wrapper_start, '{/dx_def}')
+        input = input.replace(chunk, '')
+    return input
+
+
 # Word IDs where there are mulitple words have a colon followed by the index
 # of this particular definition. We take the first definition, so this isn't
 # needed.
@@ -250,19 +305,27 @@ def clean_word_id(input):
 
 def replace_colons(input):
     colon_str = '{bc}'
-    # Each definition has a leading colon, which doesn't suit Anki formatting
-    # so we strip that first.
-    if colon_str in input and input.index(colon_str) == 0:
-        input = input[4:]
+    # Each definition has a leading colon, which doesn't suit single definition
+    # Anki formatting so we used to strip that. Now that we're taking multiple
+    # definitions, we will include it.
+    # if colon_str in input and input.index(colon_str) == 0:
+    #    input = input[4:]
 
     # Replace the remaining colons.
-    return input.replace(colon_str, '; ')
+    return input.replace(colon_str, '<b>:</b> ')
 
 
 def replace_italics_wrappers(input):
     input = input.replace('{it}', '<em>')
     input = input.replace('{/it}', '</em>')
     return input
+
+
+def n_spaces(n):
+    spaces = ''
+    for idx in range(n):
+        spaces = spaces + space_char
+    return spaces
 
 
 main()
