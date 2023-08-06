@@ -1,5 +1,0 @@
-#separator:tab
-#html:true
-#tags column:11
-NewWordValue	DefinitionValue		PoSValue						EtymologyValue	
-NewWordValue2	DefinitionValue2		PoSValue2						EtymologyValue2	
