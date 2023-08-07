@@ -2,9 +2,20 @@ import requests
 import json
 from enum import Enum
 
-# ****************************************************************************#
-#                                 GLOBAL                                      #
-# ****************************************************************************#
+# **************************************************************************#
+# This script looks for a txt file called 'generated_anki_cards.txt'. The   #
+# should be a list of words separated by newlines. For each word, it will   #
+# query Merriam-Webster's API and process the results into an object. Those #
+# will then be written to a file called 'raw_word_list.txt' in a file       #
+# format that can be imported into Anki.                                    #
+#                                                                           #
+# Normally I wouldn't create one large Python file, but for portability   #
+# I decided to structure it this way.                                       #
+# **************************************************************************#
+
+# **************************************************************************#
+#                                 GLOBAL                                    #
+# **************************************************************************#
 
 # Configuration settings.
 input_file_name = 'raw_word_list.txt'
