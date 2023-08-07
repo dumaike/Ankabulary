@@ -15,7 +15,7 @@ space_char = '&nbsp;'
 processed_words_results_dict = {}
 
 
-# All final results of a word being fetched (for logging).
+# The final results types for each word being fetched (for logging).
 class LogType(Enum):
     PROCESSED = 1
     ERROR = 2
