@@ -6,16 +6,16 @@ from enum import Enum
 #                                 GLOBAL                                      #
 # ****************************************************************************#
 
-# Configuration
+# Configuration settings.
 input_file_name = 'raw_word_list.txt'
 output_file_name = 'generated_anki_cards.txt'
 space_char = '&nbsp;'
 
-# A dictionary of log resuts of word fetching
+# A dictionary of log resuts of word fetching.
 processed_words_results_dict = {}
 
 
-# Possible results of a word being fetched
+# All final results of a word being fetched (for logging).
 class LogType(Enum):
     PROCESSED = 1
     ERROR = 2
@@ -24,11 +24,12 @@ class LogType(Enum):
     INFLECTION = 5
     MISSING_ETYMOLOGY = 6
 
-
+# A word that has been fetched from a dictionary API and flattened into
+# simple plaintext fields for Anki.
 class ProcessedWord:
     def __init__(self):
         self.word = ""
-        self.definition = ""
+        self.merged_definitions = ""
         self.etymology = ""
         self.part_of_speech = ""
 
@@ -98,7 +99,8 @@ def fetch_definitions_from_file():
     return processed_words
 
 
-# Returns None if the word wasn't found
+# Fetches a single word definition, flattens it into a ProcessedWord and returns
+# that. Returns None if the word wasn't found
 def fetch_single_word(word):
     api_key = '4996b4ec-219f-411e-9d36-403e40db7a7d'
     url = f'https://www.dictionaryapi.com/api/v3/references/collegiate/json/{word}?key={api_key}'
@@ -113,7 +115,7 @@ def fetch_single_word(word):
 
         # Only take the first part of speech to proccess
         response_dict = response_array[0]
-        processed_word.definition = read_definitions_from_response(
+        processed_word.merged_definitions = read_definitions_from_response(
             response_dict, word)
     except Exception as e:
         log_word_result(LogType.ERROR, word)
@@ -215,7 +217,7 @@ def write_anki_file(words):
 
 def write_word(word: ProcessedWord, file):
     file.write(word.word + "\t")
-    file.write(word.definition + "\t\t\t\t\t")
+    file.write(word.merged_definitions + "\t\t\t\t\t")
     file.write(word.part_of_speech + "\t\t\t")
     file.write(word.etymology + "\n")
     log_word_result(LogType.PROCESSED, word.word)
@@ -365,7 +367,7 @@ def clean_word_id(input):
 
 def replace_colons(input):
     colon_str = '{bc}'
-    # Each definition has a leading colon, which doesn't suit Ank formatting
+    # Each definition has a leading colon, which doesn't suit Ank formatting.
     if colon_str in input and input.index(colon_str) == 0:
         input = input[4:]
 
