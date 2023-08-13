@@ -9,7 +9,7 @@ from enum import Enum
 # will then be written to a file called 'raw_word_list.txt' in a file       #
 # format that can be imported into Anki.                                    #
 #                                                                           #
-# Normally I wouldn't create one large Python file, but for portability   #
+# Normally I wouldn't create one large Python file, but for portability     #
 # I decided to structure it this way.                                       #
 # **************************************************************************#
 
@@ -21,6 +21,8 @@ from enum import Enum
 input_file_name = 'raw_word_list.txt'
 output_file_name = 'generated_anki_cards.txt'
 space_char = '&nbsp;'
+line_break = '<br>'
+split_token = ', '
 
 # A dictionary of log resuts of word fetching.
 processed_words_results_dict = {}
@@ -34,6 +36,7 @@ class LogType(Enum):
     VARIANT = 4
     INFLECTION = 5
     MISSING_ETYMOLOGY = 6
+    MISSING_POS = 7
 
 # A word that has been fetched from a dictionary API and flattened into
 # simple plaintext fields for Anki.
@@ -43,6 +46,13 @@ class ProcessedWord:
         self.merged_definitions = ""
         self.etymology = ""
         self.part_of_speech = ""
+
+        
+# On object returned when one definition is parsed.
+class ProcessedDefinition:
+    def __init__(self):
+        self.next_index = 0 # The index of the next processed result.
+        self.definition_entry = ""
 
 # ****************************************************************************#
 #                                 MAIN                                        #
@@ -63,6 +73,7 @@ def main():
 
     print_processed_word_result(LogType.ERROR, "had errors. No card's weren't created for them.")
     print_processed_word_result(LogType.MISSING_ETYMOLOGY, "were missing etymologies.")
+    print_processed_word_result(LogType.MISSING_POS, "were missing parts of speech.")
     print_processed_word_result(LogType.DUPLICATE, "were duplicates of other words in the list, and cards were'nt created for them.")
     print_processed_word_result(LogType.VARIANT, "had variant data that wasn't processed")
     print_processed_word_result(LogType.INFLECTION, "had inflection data that wasn't processed")
@@ -80,7 +91,7 @@ def main():
 def fetch_definitions_from_file():
 
     try:
-        input_file = open(input_file_name, "r")
+        input_file = open(input_file_name, "r", encoding="utf-8")
     except Exception as e:
         print(
             f'Error: Input file named "{input_file_name}" not found. Aborting!')
@@ -90,6 +101,10 @@ def fetch_definitions_from_file():
     words = input_file_contents.split('\n')
     processed_words = {}
     for word in words:
+        # Ignore empty lines.
+        if len(word.strip()) == 0:
+            continue 
+
         # If this exact word already exists in the results, skip it.
         if word.lower() in processed_words:
             log_word_result(LogType.DUPLICATE, word)
@@ -132,8 +147,11 @@ def fetch_single_word(word):
         log_word_result(LogType.ERROR, word)
         return None
 
-    processed_word.part_of_speech = clean_webster_formatting(
+    try:
+        processed_word.part_of_speech = clean_webster_formatting(
         response_dict['fl'])
+    except Exception as e:
+        log_word_result(LogType.MISSING_POS, word)    
 
     try:
         processed_word.etymology = clean_webster_formatting(
@@ -147,36 +165,57 @@ def fetch_single_word(word):
 
 
 def read_definitions_from_response(response_dict, word):
+    if 'def' in response_dict:
+        return read_standard_definition(response_dict['def'], word)
+    
+    if 'cxs' in response_dict:
+        return read_cognate_cross_reference(response_dict['cxs'], word)
+    
+    raise Exception('Response contains neither a "def" or "cxs" object')
+
+def read_standard_definition(def_dict, word):
     return_definition = ''
-    definitions = response_dict['def']
 
     definition_index = 1
-    for sub_def in definitions:
-        sense_sequence = sub_def['sseq']
+    for def_entry in def_dict:
+        if 'sls' in def_entry:
+            parsed_definition = read_definition_leaf(
+                        definition_index, def_entry,  word)
+            definition_index = parsed_definition.next_index
+            return_definition = return_definition + \
+                parsed_definition.definition_entry
+
+        sense_sequence = def_entry['sseq']
         for sub_sseq in sense_sequence:
             for sub_sseq2 in sub_sseq:
                 if 'sn' in sub_sseq2[1]:
 
-                    parsed_definition = read_single_sense(
-                        definition_index, sub_sseq2,  word)
-                    if parsed_definition is not None:
-                        definition_index = definition_index + 1
-                        return_definition = return_definition + \
-                            parsed_definition
+                    parsed_definition = read_definition_leaf(
+                        definition_index, sub_sseq2[1],  word)
+                    definition_index = parsed_definition.next_index
+                    return_definition = return_definition + \
+                        parsed_definition.definition_entry
                         
                 elif sub_sseq2[0] == 'pseq':
 
                     for pseq in sub_sseq2[1]:
-                        parsed_definition = read_single_sense(
-                            definition_index, pseq, word)
-                        if parsed_definition is not None:
-                            definition_index = definition_index + 1
-                            return_definition = return_definition + \
-                                parsed_definition
+                        parsed_definition = read_definition_leaf(
+                            definition_index, pseq[1], word)
+                        definition_index = parsed_definition.next_index
+                        return_definition = return_definition + \
+                            parsed_definition.definition_entry
                             
                 elif 'dt' in sub_sseq2[1]:
-                    # This word only has a single definition, so just grab it.
-                    return clean_webster_formatting(sub_sseq2[1]['dt'][0][1])
+                    leaf_entry = sub_sseq2[1]['dt']
+                    # TODO: Usage notes are equilavent to a definition,
+                    # so unwrap them.
+                    if 'uns' in leaf_entry[0]:
+                        leaf_entry = leaf_entry[0][1][0]
+                    
+                    # This is a standalone definition (plus a possible label),
+                    # so just return it.
+                    return return_definition + \
+                        clean_webster_formatting(leaf_entry[0][1])                    
                 else:
                     print(f'Info: The API Response for {word} had unexpected '
                           'formatting, but no errors were thrown. Double '
@@ -184,24 +223,54 @@ def read_definitions_from_response(response_dict, word):
 
     return return_definition.strip()
 
+def read_cognate_cross_reference(cxs_dict, word):
+    return_definition = ''
 
-def read_single_sense(index, sense, word):
-    sense_text = sense[1]
+    for cxs_entry in cxs_dict:
+        return_definition = return_definition + cxs_entry['cxl'] + space_char
+        # The cxs label will contain cross reference targets.
+        for cxtis_entry in cxs_entry['cxtis']:
+            return_definition = \
+                return_definition + cxtis_entry['cxt'] + split_token
+
+    # Strip the trailing ", " from the cxt label list.
+    return_definition = \
+        strip_trailing_split_token(return_definition) + line_break
+
+    return return_definition.strip()
+
+def read_definition_leaf(index, sense_text, word):
+    return_result = ProcessedDefinition()
+    return_result.next_index = index
+    return_result.definition_entry = ''
 
     # TODO: Support variant entries.
-    if ('vrs' in sense_text and 'dt' not in sense_text):
+    if 'vrs' in sense_text and 'dt' not in sense_text:
         log_word_result(LogType.VARIANT, word)
-        return None
+        return return_result
 
     # TODO: Support inflection entries.
-    if ('ins' in sense_text and 'dt' not in sense_text):        
+    if 'ins' in sense_text and 'dt' not in sense_text:        
         log_word_result(LogType.INFLECTION, word)
-        return None
+        return return_result
+        
+    # This entry is a label for future sub-entries, not a definition.
+    if 'sls' in sense_text and 'dt' not in sense_text:
+        label_list = ''
+        for label_entry in sense_text['sls']:
+            label_list = label_list + label_entry + split_token
 
+        return_result.definition_entry = \
+            label_wrapper(strip_trailing_split_token(label_list) + line_break)
+        return return_result
+
+    # It's a definition.
     raw_definition = clean_webster_formatting(sense_text['dt'][0][1])
-    definition = str(index) + ') ' + raw_definition + '<br>'
+    return_result.definition_entry = \
+        str(index) + ') ' + raw_definition + line_break
+    return_result.next_index = return_result.next_index + 1
 
-    return definition
+    return return_result
 
 
 # ****************************************************************************#
@@ -397,6 +466,13 @@ def n_spaces(n):
     for idx in range(n):
         spaces = spaces + space_char
     return spaces
+
+def strip_trailing_split_token(input):
+    return input[:len(input) - len (split_token)]
+
+def label_wrapper(input):
+    returned_text = '<span style="color: #b8b8b8"><b>' + input.upper() + '</b></span>'
+    return returned_text
 
 
 # ****************************************************************************#
